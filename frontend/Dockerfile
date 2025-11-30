@@ -4,8 +4,7 @@ WORKDIR /app
 
 COPY package*.json ./
 
-RUN npm install --legacy-peer-deps
-COPY . .
+RUN npm install --legacy-peer-deps --no-audit --no-fundCOPY . .
 
 EXPOSE 3001
 
