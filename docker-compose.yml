@@ -32,15 +32,8 @@ services:
       DB_NAME: aipm_db
     depends_on:
       - postgres
-    environment:
-      DATABASE_URL: ${DATABASE_URL}
-      REDIS_URL: ${REDIS_URL}
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
     ports:
       - '3000:3000'
-    depends_on:
-      - postgres
-      - redis
   frontend:
     build: ./frontend
     ports:
