@@ -1,0 +1,805 @@
+diff --git a/docker-compose.yml b/docker-compose.yml
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/docker-compose.yml
+@@ -0,0 +1,86 @@
++version: "3.8"
++services:
++  postgres:
++    image: postgres:15
++    environment:
++      POSTGRES_USER: ${DB_USER:-aiarhitektor}
++      POSTGRES_PASSWORD: ${DB_PASSWORD:-aiarhitektor}
++      POSTGRES_DB: ${DB_NAME:-aiarhitektor}
++    volumes:
++      - pgdata:/var/lib/postgresql/data
++    ports:
++      - "${DB_PORT:-5432}:5432"
++    healthcheck:
++      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-aiarhitektor}"]
++      interval: 10s
++      timeout: 5s
++      retries: 5
++
++  redis:
++    image: redis:7
++    ports:
++      - "${REDIS_PORT:-6379}:6379"
++    healthcheck:
++      test: ["CMD", "redis-cli", "ping"]
++      interval: 10s
++      timeout: 5s
++      retries: 5
++
++  rabbitmq:
++    image: rabbitmq:3-management
++    environment:
++      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
++      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
++    ports:
++      - "${RABBITMQ_PORT:-5672}:5672"
++      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
++    healthcheck:
++      test: ["CMD-SHELL", "rabbitmqctl status"]
++      interval: 10s
++      timeout: 5s
++      retries: 5
++
++  backend:
++    build:
++      context: ./backend
++      dockerfile: Dockerfile
++    environment:
++      - NODE_ENV=production
++      - DB_HOST=postgres
++      - DB_PORT=${DB_PORT:-5432}
++      - DB_USER=${DB_USER:-aiarhitektor}
++      - DB_PASSWORD=${DB_PASSWORD:-aiarhitektor}
++      - DB_NAME=${DB_NAME:-aiarhitektor}
++      - REDIS_HOST=redis
++      - REDIS_PORT=${REDIS_PORT:-6379}
++      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
++      - PORT=${BACKEND_PORT:-4000}
++    depends_on:
++      postgres:
++        condition: service_healthy
++      redis:
++        condition: service_healthy
++      rabbitmq:
++        condition: service_healthy
++    ports:
++      - "${BACKEND_PORT:-4000}:${BACKEND_PORT:-4000}"
++    volumes:
++      - ./backend:/usr/src/app
++    command: ["node", "dist/main.js"]
++
++  frontend:
++    build:
++      context: ./frontend
++      dockerfile: Dockerfile
++    environment:
++      - VITE_API_URL=${BACKEND_PUBLIC_URL:-http://localhost:${BACKEND_PORT:-4000}}
++    ports:
++      - "${FRONTEND_PORT:-5173}:${FRONTEND_PORT:-5173}"
++    depends_on:
++      - backend
++    volumes:
++      - ./frontend:/usr/src/app
++
++  telegram-bot:
++    build:
++      context: ./telegram-bot
++      dockerfile: Dockerfile
++    environment:
++      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
++      - BACKEND_API_URL=${BACKEND_PUBLIC_URL:-http://backend:${BACKEND_PORT:-4000}}
++      - PYTHONUNBUFFERED=1
++    depends_on:
++      - backend
++    restart: unless-stopped
++
++volumes:
++  pgdata:
+diff --git a/.env.example b/.env.example
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/.env.example
+@@ -0,0 +1,22 @@
++# Database
++DB_HOST=postgres
++DB_PORT=5432
++DB_USER=aiarhitektor
++DB_PASSWORD=changeme
++DB_NAME=aiarhitektor
++
++# Redis
++REDIS_HOST=redis
++REDIS_PORT=6379
++
++# RabbitMQ
++RABBITMQ_USER=guest
++RABBITMQ_PASSWORD=guest
++RABBITMQ_PORT=5672
++RABBITMQ_MANAGEMENT_PORT=15672
++
++# Telegram bot
++TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN_HERE
++
++# Ports and public URLs
++BACKEND_PORT=4000
++FRONTEND_PORT=5173
++BACKEND_PUBLIC_URL=http://localhost:4000
++FRONTEND_PUBLIC_URL=http://localhost:5173
+diff --git a/backend/Dockerfile b/backend/Dockerfile
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/backend/Dockerfile
+@@ -0,0 +1,18 @@
++FROM node:18-alpine AS builder
++WORKDIR /usr/src/app
++COPY package.json package-lock.json ./
++RUN npm ci
++COPY tsconfig.json ./
++COPY src ./src
++RUN npm run build
++
++FROM node:18-alpine
++WORKDIR /usr/src/app
++COPY --from=builder /usr/src/app/package.json ./package.json
++COPY --from=builder /usr/src/app/dist ./dist
++RUN npm ci --production
++EXPOSE ${PORT:-4000}
++CMD ["node", "dist/main.js"]
+diff --git a/backend/package.json b/backend/package.json
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/backend/package.json
+@@ -0,0 +1,31 @@
++{
++  "name": "aiarhitektor-backend",
++  "version": "0.1.0",
++  "scripts": {
++    "start:dev": "ts-node-dev --respawn --transpile-only src/main.ts",
++    "build": "tsc -p tsconfig.json",
++    "start": "node dist/main.js"
++  },
++  "dependencies": {
++    "@nestjs/common": "^10.0.0",
++    "@nestjs/core": "^10.0.0",
++    "@nestjs/platform-express": "^10.0.0",
++    "@nestjs/typeorm": "^10.0.0",
++    "typeorm": "^0.3.17",
++    "pg": "^8.10.0",
++    "reflect-metadata": "^0.1.13",
++    "ioredis": "^5.3.2",
++    "amqplib": "^0.10.3",
++    "class-transformer": "^0.5.1",
++    "class-validator": "^0.14.0"
++  },
++  "devDependencies": {
++    "ts-node-dev": "^2.0.0",
++    "typescript": "^5.0.0"
++  }
++}
+diff --git a/backend/tsconfig.json b/backend/tsconfig.json
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/backend/tsconfig.json
+@@ -0,0 +1,23 @@
++{
++  "compilerOptions": {
++    "module": "CommonJS",
++    "declaration": false,
++    "removeComments": true,
++    "emitDecoratorMetadata": true,
++    "experimentalDecorators": true,
++    "target": "ES2020",
++    "sourceMap": true,
++    "outDir": "dist",
++    "strict": true,
++    "esModuleInterop": true,
++    "skipLibCheck": true
++  },
++  "include": ["src/**/*"]
++}
+diff --git a/backend/src/main.ts b/backend/src/main.ts
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/backend/src/main.ts
+@@ -0,0 +1,13 @@
++import { NestFactory } from '@nestjs/core';
++import { AppModule } from './app.module';
++import * as process from 'process';
++
++async function bootstrap() {
++  const app = await NestFactory.create(AppModule);
++  const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 4000;
++  await app.listen(port, '0.0.0.0');
++  console.log(`Backend listening on ${port}`);
++}
++bootstrap();
+diff --git a/backend/src/app.module.ts b/backend/src/app.module.ts
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/backend/src/app.module.ts
+@@ -0,0 +1,54 @@
++import { Module, OnModuleInit, Logger } from '@nestjs/common';
++import { TypeOrmModule } from '@nestjs/typeorm';
++import { Project } from './projects/project.entity';
++import { Task } from './tasks/task.entity';
++import { ProjectsModule } from './projects/projects.module';
++import { TasksModule } from './tasks/tasks.module';
++import { AiModule } from './ai/ai.module';
++import { HealthController } from './health/health.controller';
++import { createClient } from 'ioredis';
++import { ConnectionOptions } from 'typeorm';
++
++@Module({
++  imports: [
++    TypeOrmModule.forRootAsync({
++      useFactory: () => {
++        const host = process.env.DB_HOST || 'postgres';
++        const port = parseInt(process.env.DB_PORT || '5432', 10);
++        const username = process.env.DB_USER || 'aiarhitektor';
++        const password = process.env.DB_PASSWORD || 'changeme';
++        const database = process.env.DB_NAME || 'aiarhitektor';
++        const options: ConnectionOptions = {
++          type: 'postgres',
++          host,
++          port,
++          username,
++          password,
++          database,
++          entities: [Project, Task],
++          synchronize: true
++        } as any;
++        return options;
++      }
++    }),
++    ProjectsModule,
++    TasksModule,
++    AiModule
++  ],
++  controllers: [HealthController],
++  providers: []
++})
++export class AppModule implements OnModuleInit {
++  private readonly logger = new Logger(AppModule.name);
++  async onModuleInit() {
++    try {
++      const redisHost = process.env.REDIS_HOST || 'redis';
++      const redisPort = parseInt(process.env.REDIS_PORT || '6379', 10);
++      const client = createClient({ host: redisHost, port: redisPort } as any);
++      client.on('error', (e) => this.logger.warn('Redis error:' + e));
++      await client.connect();
++      await client.ping();
++      await client.disconnect();
++      this.logger.log('Redis ping OK');
++    } catch (e) {
++      this.logger.warn('Redis ping failed: ' + e);
++    }
++  }
++}
+diff --git a/backend/src/health/health.controller.ts b/backend/src/health/health.controller.ts
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/backend/src/health/health.controller.ts
+@@ -0,0 +1,16 @@
++import { Controller, Get } from '@nestjs/common';
++import * as process from 'process';
++
++@Controller()
++export class HealthController {
++  @Get('health')
++  health() {
++    return {
++      status: 'ok',
++      env: process.env.NODE_ENV || 'development'
++    };
++  }
++}
+diff --git a/backend/src/projects/project.entity.ts b/backend/src/projects/project.entity.ts
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/backend/src/projects/project.entity.ts
+@@ -0,0 +1,24 @@
++import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
++import { Task } from '../tasks/task.entity';
++
++@Entity({ name: 'projects' })
++export class Project {
++  @PrimaryGeneratedColumn('uuid')
++  id: string;
++
++  @Column()
++  name: string;
++
++  @Column({ nullable: true })
++  description?: string;
++
++  @OneToMany(() => Task, (task) => task.project)
++  tasks?: Task[];
++}
+diff --git a/backend/src/projects/projects.module.ts b/backend/src/projects/projects.module.ts
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/backend/src/projects/projects.module.ts
+@@ -0,0 +1,16 @@
++import { Module } from '@nestjs/common';
++import { TypeOrmModule } from '@nestjs/typeorm';
++import { Project } from './project.entity';
++import { ProjectsController } from './projects.controller';
++import { ProjectsService } from './projects.service';
++
++@Module({
++  imports: [TypeOrmModule.forFeature([Project])],
++  controllers: [ProjectsController],
++  providers: [ProjectsService],
++  exports: [ProjectsService]
++})
++export class ProjectsModule {}
+diff --git a/backend/src/projects/projects.service.ts b/backend/src/projects/projects.service.ts
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/backend/src/projects/projects.service.ts
+@@ -0,0 +1,28 @@
++import { Injectable } from '@nestjs/common';
++import { Repository } from 'typeorm';
++import { Project } from './project.entity';
++import { InjectRepository } from '@nestjs/typeorm';
++
++@Injectable()
++export class ProjectsService {
++  constructor(
++    @InjectRepository(Project)
++    private readonly repo: Repository<Project>
++  ) {}
++
++  async findAll(): Promise<Project[]> {
++    return this.repo.find({ relations: ['tasks'] });
++  }
++
++  async create(data: Partial<Project>): Promise<Project> {
++    const p = this.repo.create(data);
++    return this.repo.save(p);
++  }
++}
+diff --git a/backend/src/projects/projects.controller.ts b/backend/src/projects/projects.controller.ts
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/backend/src/projects/projects.controller.ts
+@@ -0,0 +1,22 @@
++import { Body, Controller, Get, Post } from '@nestjs/common';
++import { ProjectsService } from './projects.service';
++
++@Controller('projects')
++export class ProjectsController {
++  constructor(private readonly svc: ProjectsService) {}
++
++  @Get()
++  async list() {
++    return this.svc.findAll();
++  }
++
++  @Post()
++  async create(@Body() body: { name: string; description?: string }) {
++    return this.svc.create(body);
++  }
++}
+diff --git a/backend/src/tasks/task.entity.ts b/backend/src/tasks/task.entity.ts
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/backend/src/tasks/task.entity.ts
+@@ -0,0 +1,28 @@
++import { Entity, PrimaryGeneratedColumn, Column, ManyToOne } from 'typeorm';
++import { Project } from '../projects/project.entity';
++
++@Entity({ name: 'tasks' })
++export class Task {
++  @PrimaryGeneratedColumn('uuid')
++  id: string;
++
++  @Column()
++  title: string;
++
++  @Column({ default: false })
++  done: boolean;
++
++  @ManyToOne(() => Project, (p) => p.tasks, { nullable: true, onDelete: 'SET NULL' })
++  project?: Project;
++}
+diff --git a/backend/src/tasks/tasks.module.ts b/backend/src/tasks/tasks.module.ts
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/backend/src/tasks/tasks.module.ts
+@@ -0,0 +1,18 @@
++import { Module } from '@nestjs/common';
++import { TypeOrmModule } from '@nestjs/typeorm';
++import { Task } from './task.entity';
++import { TasksController } from './tasks.controller';
++import { TasksService } from './tasks.service';
++
++@Module({
++  imports: [TypeOrmModule.forFeature([Task])],
++  controllers: [TasksController],
++  providers: [TasksService],
++  exports: [TasksService]
++})
++export class TasksModule {}
+diff --git a/backend/src/tasks/tasks.service.ts b/backend/src/tasks/tasks.service.ts
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/backend/src/tasks/tasks.service.ts
+@@ -0,0 +1,72 @@
++import { Injectable, Logger } from '@nestjs/common';
++import { Repository } from 'typeorm';
++import { Task } from './task.entity';
++import { InjectRepository } from '@nestjs/typeorm';
++import amqp from 'amqplib';
++
++@Injectable()
++export class TasksService {
++  private logger = new Logger(TasksService.name);
++  private rabbitChannel: amqp.Channel | null = null;
++
++  constructor(
++    @InjectRepository(Task)
++    private readonly repo: Repository<Task>
++  ) {
++    this.initRabbit().catch((e) => this.logger.warn('Rabbit init error ' + e));
++  }
++
++  private async initRabbit() {
++    const url = process.env.RABBITMQ_URL || 'amqp://guest:guest@rabbitmq:5672';
++    const conn = await amqp.connect(url);
++    this.rabbitChannel = await conn.createChannel();
++    await this.rabbitChannel.assertExchange('tasks', 'topic', { durable: true });
++    // Start a simple consumer for task.created (for demo)
++    const q = await this.rabbitChannel.assertQueue('', { exclusive: true });
++    await this.rabbitChannel.bindQueue(q.queue, 'tasks', 'task.created');
++    this.rabbitChannel.consume(q.queue, (msg) => {
++      if (msg) {
++        try {
++          const data = msg.content.toString();
++          this.logger.log(`[rabbit consumer] received: ${data}`);
++        } catch (e) {
++          this.logger.error('consumer error', e);
++        } finally {
++          this.rabbitChannel!.ack(msg);
++        }
++      }
++    });
++  }
++
++  async findAll(): Promise<Task[]> {
++    return this.repo.find();
++  }
++
++  async create(data: Partial<Task>): Promise<Task> {
++    const t = this.repo.create(data);
++    const saved = await this.repo.save(t);
++    // publish event
++    try {
++      if (this.rabbitChannel) {
++        const payload = Buffer.from(JSON.stringify({ event: 'task.created', taskId: saved.id, title: saved.title }));
++        this.rabbitChannel.publish('tasks', 'task.created', payload, { persistent: false });
++      }
++    } catch (e) {
++      this.logger.warn('Failed to publish rabbit event: ' + e);
++    }
++    return saved;
++  }
++}
+diff --git a/backend/src/tasks/tasks.controller.ts b/backend/src/tasks/tasks.controller.ts
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/backend/src/tasks/tasks.controller.ts
+@@ -0,0 +1,22 @@
++import { Body, Controller, Get, Post } from '@nestjs/common';
++import { TasksService } from './tasks.service';
++
++@Controller('tasks')
++export class TasksController {
++  constructor(private readonly svc: TasksService) {}
++
++  @Get()
++  async list() {
++    return this.svc.findAll();
++  }
++
++  @Post()
++  async create(@Body() body: { title: string; done?: boolean }) {
++    return this.svc.create(body);
++  }
++}
+diff --git a/backend/src/ai/ai.module.ts b/backend/src/ai/ai.module.ts
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/backend/src/ai/ai.module.ts
+@@ -0,0 +1,6 @@
++import { Module } from '@nestjs/common';
++import { AiController } from './ai.controller';
++
++@Module({
++  controllers: [AiController],
++})
++export class AiModule {}
+diff --git a/backend/src/ai/ai.controller.ts b/backend/src/ai/ai.controller.ts
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/backend/src/ai/ai.controller.ts
+@@ -0,0 +1,17 @@
++import { Body, Controller, Post } from '@nestjs/common';
++
++@Controller('api')
++export class AiController {
++  @Post('chat')
++  async chat(@Body() body: { message: string }) {
++    const message = body?.message || '';
++    // simple echo + placeholder
++    const response = `Echo: ${message}\n\n(Логика LLM ещё не подключена — это заглушка)`;
++    return { response };
++  }
++}
+diff --git a/frontend/Dockerfile b/frontend/Dockerfile
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/frontend/Dockerfile
+@@ -0,0 +1,9 @@
++FROM node:18-alpine
++WORKDIR /usr/src/app
++ENV PATH /usr/src/app/node_modules/.bin:$PATH
++COPY package.json package-lock.json ./
++RUN npm ci
++COPY . .
++EXPOSE ${FRONTEND_PORT:-5173}
++CMD ["npm", "run", "dev"]
+diff --git a/frontend/package.json b/frontend/package.json
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/frontend/package.json
+@@ -0,0 +1,28 @@
++{
++  "name": "aiarhitektor-frontend",
++  "version": "0.1.0",
++  "private": true,
++  "scripts": {
++    "dev": "vite --host --port ${FRONTEND_PORT:-5173}",
++    "build": "vite build",
++    "preview": "vite preview --port ${FRONTEND_PORT:-5173}"
++  },
++  "dependencies": {
++    "react": "^18.2.0",
++    "react-dom": "^18.2.0"
++  },
++  "devDependencies": {
++    "vite": "^5.2.0",
++    "@types/react": "^18.0.0",
++    "@types/react-dom": "^18.0.0",
++    "typescript": "^5.0.0"
++  }
++}
+diff --git a/frontend/index.html b/frontend/index.html
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/frontend/index.html
+@@ -0,0 +1,17 @@
++<!doctype html>
++<html>
++  <head>
++    <meta charset="utf-8" />
++    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
++    <title>Aiarhitektor</title>
++  </head>
++  <body>
++    <div id="root"></div>
++    <script type="module" src="/src/main.tsx"></script>
++  </body>
++</html>
+diff --git a/frontend/src/main.tsx b/frontend/src/main.tsx
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/frontend/src/main.tsx
+@@ -0,0 +1,6 @@
++import React from 'react';
++import { createRoot } from 'react-dom/client';
++import App from './App';
++
++createRoot(document.getElementById('root')!).render(<App />);
+diff --git a/frontend/src/App.tsx b/frontend/src/App.tsx
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/frontend/src/App.tsx
+@@ -0,0 +1,24 @@
++import React from 'react';
++import Chat from './pages/Chat';
++import Projects from './pages/Projects';
++
++export default function App() {
++  const [page, setPage] = React.useState<'chat' | 'projects'>('chat');
++  return (
++    <div style={{ padding: 20, fontFamily: 'Arial' }}>
++      <h1>Aiarhitektor (minimal)</h1>
++      <nav style={{ marginBottom: 10 }}>
++        <button onClick={() => setPage('chat')}>Chat</button>
++        <button onClick={() => setPage('projects')}>Projects</button>
++      </nav>
++      {page === 'chat' ? <Chat /> : <Projects />}
++    </div>
++  );
++}
+diff --git a/frontend/src/pages/Chat.tsx b/frontend/src/pages/Chat.tsx
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/frontend/src/pages/Chat.tsx
+@@ -0,0 +1,45 @@
++import React, { useState } from 'react';
++
++const API = import.meta.env.VITE_API_URL || 'http://localhost:4000';
++
++export default function Chat() {
++  const [msg, setMsg] = useState('');
++  const [history, setHistory] = useState<{ request: string; response: string }[]>([]);
++
++  async function send() {
++    if (!msg) return;
++    const res = await fetch(`${API}/api/chat`, {
++      method: 'POST',
++      headers: { 'Content-Type': 'application/json' },
++      body: JSON.stringify({ message: msg })
++    });
++    const data = await res.json();
++    setHistory((h) => [{ request: msg, response: data?.response || '' }, ...h]);
++    setMsg('');
++  }
++
++  return (
++    <div>
++      <h2>Chat (stub)</h2>
++      <div>
++        <input value={msg} onChange={(e) => setMsg(e.target.value)} style={{ width: 400 }} />
++        <button onClick={send}>Send</button>
++      </div>
++      <div style={{ marginTop: 20 }}>
++        {history.map((h, i) => (
++          <div key={i} style={{ borderBottom: '1px solid #ccc', marginBottom: 10 }}>
++            <div><strong>You:</strong> {h.request}</div>
++            <div><strong>AI:</strong> {h.response}</div>
++          </div>
++        ))}
++      </div>
++    </div>
++  );
++}
+diff --git a/frontend/src/pages/Projects.tsx b/frontend/src/pages/Projects.tsx
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/frontend/src/pages/Projects.tsx
+@@ -0,0 +1,46 @@
++import React, { useEffect, useState } from 'react';
++const API = import.meta.env.VITE_API_URL || 'http://localhost:4000';
++
++export default function Projects() {
++  const [projects, setProjects] = useState<any[]>([]);
++  const [title, setTitle] = useState('');
++
++  async function load() {
++    const res = await fetch(`${API}/projects`);
++    setProjects(await res.json());
++  }
++  useEffect(() => { load(); }, []);
++
++  async function create() {
++    if (!title) return;
++    await fetch(`${API}/projects`, {
++      method: 'POST',
++      headers: { 'Content-Type': 'application/json' },
++      body: JSON.stringify({ name: title })
++    });
++    setTitle('');
++    await load();
++  }
++
++  return (
++    <div>
++      <h2>Projects</h2>
++      <div>
++        <input value={title} onChange={(e) => setTitle(e.target.value)} />
++        <button onClick={create}>Create</button>
++      </div>
++      <ul>
++        {projects.map((p) => <li key={p.id}>{p.name} — {p.description || ''}</li>)}
++      </ul>
++    </div>
++  );
++}
+diff --git a/telegram-bot/Dockerfile b/telegram-bot/Dockerfile
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/telegram-bot/Dockerfile
+@@ -0,0 +1,9 @@
++FROM python:3.11-slim
++WORKDIR /app
++COPY requirements.txt .
++RUN pip install --no-cache-dir -r requirements.txt
++COPY main.py .
++ENV PYTHONUNBUFFERED=1
++CMD ["python", "main.py"]
+diff --git a/telegram-bot/requirements.txt b/telegram-bot/requirements.txt
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/telegram-bot/requirements.txt
+@@ -0,0 +1,2 @@
++aiogram==3.1.1
++httpx==0.24.1
+diff --git a/telegram-bot/main.py b/telegram-bot/main.py
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/telegram-bot/main.py
+@@ -0,0 +1,44 @@
++import os
++import asyncio
++from aiogram import Bot, Dispatcher, types
++import httpx
++
++TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
++BACKEND = os.environ.get("BACKEND_API_URL", "http://backend:4000")
++
++if not TOKEN:
++    raise RuntimeError("TELEGRAM_BOT_TOKEN env var is required")
++
++bot = Bot(token=TOKEN)
++dp = Dispatcher()
++
++@dp.message(commands=["start"])
++async def cmd_start(message: types.Message):
++    await message.reply("Привет! Я бот Aiarhitektor. Пришли мне сообщение, я отправлю его в backend /api/chat и верну ответ.")
++
++@dp.message()
++async def echo_all(message: types.Message):
++    text = message.text or ""
++    async with httpx.AsyncClient() as client:
++        try:
++            r = await client.post(f"{BACKEND.rstrip('/')}/api/chat", json={"message": text}, timeout=30.0)
++            data = r.json()
++            resp = data.get("response", "No response")
++        except Exception as e:
++            resp = f"Ошибка при обращении к backend: {e}"
++    await message.reply(resp)
++
++async def main():
++    await dp.start_polling(bot)
++
++if __name__ == "__main__":
++    try:
++        asyncio.run(main())
++    except (KeyboardInterrupt, SystemExit):
++        pass
