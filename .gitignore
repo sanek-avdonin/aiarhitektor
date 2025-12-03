@@ -9,3 +9,9 @@ build/
 .idea/
 .vscode/
 *.log
+file.env
+.env.local
+.env.dev
+secrets/
+# IDE and OS
+Thumbs.db
