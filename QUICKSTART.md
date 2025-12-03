@@ -35,6 +35,7 @@ Welcome to AIArchitektor! This quick start guide will get you up and running in 
    ```bash
    cp .env.example .env
    # Edit .env with your API keys if needed
+       > **⚠️ IMPORTANT**: Make sure `DB_PASSWORD` is changed to a secure value and `DB_NAME` is set to `aiarchitektor`
    ```
 
 3. **Start services:**
