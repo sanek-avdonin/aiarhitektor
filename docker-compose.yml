@@ -28,8 +28,7 @@ services:
   backend:
     build: ./backend
     env_file:
-      - ./file.env
-    environment:
+      - .env    environment:
       DB_HOST: postgres
       DB_PORT: '5432'
       DB_USER: ${DB_USER}
@@ -48,8 +47,7 @@ services:
   telegram-bot:
     build: ./telegram-bot
     env_file:
-      - ./file.env
-    environment:
+      - .env    environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       BACKEND_API_URL: http://backend:3000
 
