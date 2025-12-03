@@ -67,6 +67,14 @@ For more control or troubleshooting:
 3. **Configure environment:**
    ```bash
    copy .env.example .env
+
+   > **IMPORTANT**: Edit the `.env` file and ensure the database credentials match:
+> - `DB_NAME`: Should be `aiarchitektor`
+> - `DB_USER`: Should be `postgres` (or your username)
+> - `DB_PASSWORD`: Change to a secure password
+> - Make sure these values match the variables in `docker-compose.yml`
+>
+> Do NOT commit your edited `.env` file to git (it's in `.gitignore` for security)
    # Edit .env with your API keys
    ```
 
