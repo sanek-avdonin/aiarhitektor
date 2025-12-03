@@ -10,10 +10,12 @@ services:
       - '5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
   redis:
     image: redis:7-alpine
     ports:
       - '6379:6379'
+
   rabbitmq:
     image: rabbitmq:3.12-management-alpine
     environment:
@@ -22,26 +24,34 @@ services:
     ports:
       - '5672:5672'
       - '15672:15672'
+
   backend:
     build: ./backend
+    env_file:
+      - ./file.env
     environment:
-      DB_USER: postgres
-      DB_PASSWORD: postgres
       DB_HOST: postgres
       DB_PORT: '5432'
-      DB_NAME: aipm_db
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
     depends_on:
       - postgres
     ports:
       - '3000:3000'
+
   frontend:
     build: ./frontend
     ports:
       - '3001:3000'
+
   telegram-bot:
     build: ./telegram-bot
+    env_file:
+      - ./file.env
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       BACKEND_API_URL: http://backend:3000
+
 volumes:
   postgres_data:
